@@ -250,7 +250,7 @@ def get_medium(
 def get_hydrogen_binding(
     element: str = "Ni",
     cubic: bool = True,
-    dislocation_type: str = "edges",
+    dislocation_type: str = "edge",
     potential_name="1995--Angelo-J-E--Ni-Al-H--LAMMPS--ipr1",
     n_repeat: int = 3,
     x_min: Annotated[float, {"units": "angstrom"}] = -10,
