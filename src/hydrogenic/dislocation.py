@@ -24,7 +24,7 @@ from atomistics.workflows import (
 def get_orientation(dislocation_type: str = "screw", glide_plane: str = "y") -> list:
     assert glide_plane in ["x", "y"]
     assert dislocation_type in ["edge", "screw"]
-    orient = get_orientation(dislocation_type=dislocation_type, crystal="fcc")
+    orient = get_dislocation_orientation(dislocation_type=dislocation_type, crystal="fcc")
     perpend = np.cross(orient["glide_plane"], orient["dislocation_line"])
     if glide_plane == "x":
         return np.array([orient["glide_plane"], -perpend, orient["dislocation_line"]])
