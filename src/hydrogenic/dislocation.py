@@ -103,10 +103,6 @@ def get_burgers_vector(
     return burgers_vector
 
 
-def _as_quantity(value, unit, ureg: UnitRegistry):
-    return value if hasattr(value, "to") else value * unit
-
-
 def get_elastic_matrix(
     fit_dict: dict,
 ) -> Annotated[
@@ -229,26 +225,13 @@ def get_dislocation_distance(
         Partial-dislocation separation in angstrom.
     """
     ureg = UnitRegistry()
-    x = _as_quantity(
-        np.linspace(x_min, x_max, n_x)[:, None] * [1, 0], ureg.angstrom, ureg
-    )
-    stress = _as_quantity(
-        medium.get_dislocation_stress(
-            x,
-            _as_quantity(burgers_vectors[0], ureg.angstrom, ureg),
-        ),
-        ureg.gigapascal,
-        ureg,
-    )
+    x = np.linspace(x_min, x_max, n_x)[:, None] * [1, 0] * ureg.angstrom
+    stress = medium.get_dislocation_stress(x, burgers_vectors[0] * ureg.angstrom)
     f = (
-        _as_quantity(
-            medium.get_dislocation_force(
-                stress,
-                glide_plane=[0, 1, 0],
-                burgers_vector=_as_quantity(burgers_vectors[1], ureg.angstrom, ureg),
-            ),
-            ureg.millijoule / ureg.meter**2,
-            ureg,
+        medium.get_dislocation_force(
+            stress,
+            glide_plane=[0, 1, 0],
+            burgers_vector=burgers_vectors[1] * ureg.angstrom,
         )
         .to("millijoule/meter**2")
         .magnitude
@@ -295,10 +278,7 @@ def get_dipole_tensor(
     )
     ureg = UnitRegistry()
     dipole_tensor = (
-        (
-            _as_quantity(result["stress"], ureg.bar, ureg)
-            * _as_quantity(result["volume"], ureg.angstrom**3, ureg)
-        )
+        (result["stress"] * ureg.bar * result["volume"] * ureg.angstrom**3)
         .to("eV")
         .magnitude
     )

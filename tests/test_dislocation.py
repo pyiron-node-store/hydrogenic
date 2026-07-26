@@ -13,7 +13,10 @@ class TestDislocation(unittest.TestCase):
         for disloc in ["edge", "screw"]:
             for gp in ["x", "y"]:
                 orientation = dislocation.get_orientation(disloc, gp)
-                self.assertAlmostEqual(np.linalg.det(orientation), np.prod(np.linalg.norm(orientation, axis=-1)))
+                self.assertAlmostEqual(
+                    np.linalg.det(orientation),
+                    np.prod(np.linalg.norm(orientation, axis=-1)),
+                )
 
     def test_burgers_vector_is_fcc(self):
         burgers_vector = dislocation.get_burgers_vector(
@@ -26,7 +29,9 @@ class TestDislocation(unittest.TestCase):
         structure = Atoms("Ni")
         with (
             patch.object(dislocation, "bulk", return_value=structure) as bulk_mock,
-            patch.object(dislocation, "get_tasks_for_energy_volume_curve", return_value={}),
+            patch.object(
+                dislocation, "get_tasks_for_energy_volume_curve", return_value={}
+            ),
             patch.object(dislocation, "evaluate_with_lammpslib", return_value={}),
             patch.object(
                 dislocation,
@@ -40,6 +45,7 @@ class TestDislocation(unittest.TestCase):
 
         bulk_mock.assert_called_once_with("Ni", cubic=False)
         self.assertAlmostEqual(lattice_parameter, np.cbrt(400.0))
+
 
 if __name__ == "__main__":
     unittest.main()
