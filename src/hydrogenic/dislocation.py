@@ -37,7 +37,7 @@ def get_lattice_parameter(
     potential_dataframe: pd.DataFrame,
     cubic=True
 ) -> Annotated[float, {"units": "angstrom"}]:
-    structure = bulk(element, cubic=True)
+    structure = bulk(element, cubic=cubic)
     task_dict = get_tasks_for_energy_volume_curve(
         structure=structure,
         num_points=11,
@@ -54,7 +54,7 @@ def get_lattice_parameter(
         fit_type="polynomial",
         fit_order=3,
     )
-    lattice_parameter = fit_dict["volume_eq"]**(1 / 3)
+    lattice_parameter = (4 * fit_dict["volume_eq"] / len(structure)) ** (1 / 3)
     return lattice_parameter
 
 
@@ -62,7 +62,9 @@ def get_burgers_vector(
     lattice_parameter: Annotated[float, {"units": "angstrom"}],
     dislocation_type: str = "edge",
 ):
-    direction = get_dislocation_orientation(dislocation_type)["burgers_vector"]
+    direction = get_dislocation_orientation(
+        dislocation_type, crystal="fcc"
+    )["burgers_vector"]
     burgers_vector = (
         lattice_parameter
         * np.asarray(direction)

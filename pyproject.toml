@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hydrogenic"
+version = "0.0.1"
+description = "Tools for describing hydrogen diffusion"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "ase==3.29.0",
+    "atomistics[lammps]==0.3.8",
+    "elaston==0.0.2",
+    "flowrep==0.5.2",
+    "numpy==2.4.6",
+    "pandas==3.0.3",
+    "pint==0.25.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hydrogenic"]
