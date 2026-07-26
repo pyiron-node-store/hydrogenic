@@ -22,9 +22,20 @@ from atomistics.workflows import (
 
 
 def get_orientation(dislocation_type: str = "screw", glide_plane: str = "y") -> list:
+    """Return an FCC dislocation orientation aligned to a glide plane.
+
+    Args:
+        dislocation_type: Dislocation character, either ``"edge"`` or ``"screw"``.
+        glide_plane: Box axis to which the glide-plane normal is aligned.
+
+    Returns:
+        Orientation matrix with rows corresponding to the box axes.
+    """
     assert glide_plane in ["x", "y"]
     assert dislocation_type in ["edge", "screw"]
-    orient = get_dislocation_orientation(dislocation_type=dislocation_type, crystal="fcc")
+    orient = get_dislocation_orientation(
+        dislocation_type=dislocation_type, crystal="fcc"
+    )
     perpend = np.cross(orient["glide_plane"], orient["dislocation_line"])
     if glide_plane == "x":
         return np.array([orient["glide_plane"], -perpend, orient["dislocation_line"]])
@@ -33,10 +44,18 @@ def get_orientation(dislocation_type: str = "screw", glide_plane: str = "y") -> 
 
 
 def get_lattice_parameter(
-    element: str,
-    potential_dataframe: pd.DataFrame,
-    cubic=True
+    element: str, potential_dataframe: pd.DataFrame, cubic=True
 ) -> Annotated[float, {"units": "angstrom"}]:
+    """Calculate an element's equilibrium lattice parameter from an energy-volume fit.
+
+    Args:
+        element: Chemical symbol of the elemental bulk structure.
+        potential_dataframe: LAMMPS potential definition used for the calculations.
+        cubic: Whether to create a conventional cubic bulk cell.
+
+    Returns:
+        Equilibrium lattice parameter in angstrom.
+    """
     structure = bulk(element, cubic=cubic)
     task_dict = get_tasks_for_energy_volume_curve(
         structure=structure,
@@ -49,7 +68,7 @@ def get_lattice_parameter(
         potential_dataframe=potential_dataframe,
     )
     fit_dict = analyse_results_for_energy_volume_curve(
-        output_dict=result_dict, 
+        output_dict=result_dict,
         task_dict=task_dict,
         fit_type="polynomial",
         fit_order=3,
@@ -62,9 +81,18 @@ def get_burgers_vector(
     lattice_parameter: Annotated[float, {"units": "angstrom"}],
     dislocation_type: str = "edge",
 ):
-    direction = get_dislocation_orientation(
-        dislocation_type, crystal="fcc"
-    )["burgers_vector"]
+    """Return the FCC Burgers vector in crystal coordinates.
+
+    Args:
+        lattice_parameter: Equilibrium lattice parameter in angstrom.
+        dislocation_type: Dislocation character, either ``"edge"`` or ``"screw"``.
+
+    Returns:
+        Three-component Burgers vector in angstrom.
+    """
+    direction = get_dislocation_orientation(dislocation_type, crystal="fcc")[
+        "burgers_vector"
+    ]
     burgers_vector = (
         lattice_parameter
         * np.asarray(direction)
@@ -83,6 +111,14 @@ def get_elastic_matrix(
 ) -> Annotated[
     np.ndarray, {"shape": (6, 6), "units": "gigapascal", "label": "elastic_matrix"}
 ]:
+    """Extract the elastic matrix from fitted elastic-constant results.
+
+    Args:
+        fit_dict: Results dictionary returned by elastic-matrix analysis.
+
+    Returns:
+        Six-by-six elastic matrix in gigapascal.
+    """
     return fit_dict["elastic_matrix"]
 
 
@@ -92,6 +128,17 @@ def evaluate_lammps_for_elastic_matrix(
     num_point=5,
     eps_range=0.005,
 ) -> Annotated[np.ndarray, {"shape": (6, 6), "units": "gigapascal"}]:
+    """Calculate a structure's elastic matrix with the selected LAMMPS potential.
+
+    Args:
+        structure: Atomic structure for which to calculate elastic constants.
+        potential_name: Name of the LAMMPS potential to use.
+        num_point: Number of strain points for each elastic deformation.
+        eps_range: Maximum strain magnitude for the elastic fit.
+
+    Returns:
+        Six-by-six elastic matrix in gigapascal.
+    """
     potential_dataframe = get_potential_by_name(potential_name=potential_name)
     task_dict, sym_dict = get_tasks_for_elastic_matrix(
         structure=structure,
@@ -119,13 +166,25 @@ def get_elastic_tensor(
 ) -> Annotated[
     np.ndarray, {"shape": (6, 6), "units": "gigapascal", "label": "elastic_matrix"}
 ]:
+    """Calculate the elastic matrix for a bulk elemental structure.
+
+    Args:
+        element: Chemical symbol of the elemental bulk structure.
+        cubic: Whether to create a conventional cubic bulk cell.
+        potential_name: Name of the LAMMPS potential to use.
+        num_point: Number of strain points for each elastic deformation.
+        eps_range: Maximum strain magnitude for the elastic fit.
+
+    Returns:
+        Six-by-six elastic matrix in gigapascal.
+    """
     structure = bulk(element, cubic=cubic)
     elastic_matrix = evaluate_lammps_for_elastic_matrix(
         structure=structure,
         potential_name=potential_name,
         num_point=num_point,
         eps_range=eps_range,
-    )   
+    )
     return elastic_matrix
 
 
@@ -133,6 +192,15 @@ def get_partial_burgers_vectors(
     burgers_vector: Annotated[np.ndarray, {"shape": (3,), "units": "angstrom"}],
     orientation: np.ndarray | list,
 ) -> Annotated[np.ndarray, {"shape": (2, 3), "units": "angstrom"}]:
+    """Split a Burgers vector into Shockley partials in box coordinates.
+
+    Args:
+        burgers_vector: Perfect-dislocation Burgers vector in angstrom.
+        orientation: Crystal-to-box orientation matrix.
+
+    Returns:
+        Two three-component partial Burgers vectors in angstrom.
+    """
     shockley_partials = get_shockley_partials(burgers_vector)
     burgers_vectors = tools.crystal_to_box(shockley_partials, orientation=orientation)
     return burgers_vectors
@@ -146,8 +214,23 @@ def get_dislocation_distance(
     n_x: int = 100,
     sfe: Annotated[float, {"units": "millijoule / meter**2"}] = 90,
 ) -> Annotated[float, {"units": "angstrom", "label": "dislocation_distance"}]:
+    """Find the partial separation where glide force equals stacking-fault energy.
+
+    Args:
+        medium: Linear-elastic medium used to calculate stress and force.
+        burgers_vectors: Partial Burgers vectors in angstrom.
+        x_min: Lower bound of the separation search interval in angstrom.
+        x_max: Upper bound of the separation search interval in angstrom.
+        n_x: Number of separation values to evaluate.
+        sfe: Stacking-fault energy in millijoule per square meter.
+
+    Returns:
+        Partial-dislocation separation in angstrom.
+    """
     ureg = UnitRegistry()
-    x = _as_quantity(np.linspace(x_min, x_max, n_x)[:, None] * [1, 0], ureg.angstrom, ureg)
+    x = _as_quantity(
+        np.linspace(x_min, x_max, n_x)[:, None] * [1, 0], ureg.angstrom, ureg
+    )
     stress = _as_quantity(
         medium.get_dislocation_stress(
             x,
@@ -156,21 +239,34 @@ def get_dislocation_distance(
         ureg.gigapascal,
         ureg,
     )
-    f = _as_quantity(
-        medium.get_dislocation_force(
-            stress,
-            glide_plane=[0, 1, 0],
-            burgers_vector=_as_quantity(burgers_vectors[1], ureg.angstrom, ureg),
-        ),
-        ureg.millijoule / ureg.meter**2,
-        ureg,
-    ).to("millijoule/meter**2").magnitude
+    f = (
+        _as_quantity(
+            medium.get_dislocation_force(
+                stress,
+                glide_plane=[0, 1, 0],
+                burgers_vector=_as_quantity(burgers_vectors[1], ureg.angstrom, ureg),
+            ),
+            ureg.millijoule / ureg.meter**2,
+            ureg,
+        )
+        .to("millijoule/meter**2")
+        .magnitude
+    )
     F = (f - sfe)[:, 0]
     X = x.magnitude[:, 0]
     return X[np.abs(F).argmin()]
 
 
 def get_hydrogen_structure(element="Ni", n_repeat=3):
+    """Build a repeated cubic elemental cell with one interstitial hydrogen atom.
+
+    Args:
+        element: Chemical symbol of the host crystal.
+        n_repeat: Number of repetitions along each cell axis.
+
+    Returns:
+        Atomic structure containing the host crystal and one hydrogen atom.
+    """
     bulk_structure = bulk(element, cubic=True)
     structure = bulk_structure.repeat(n_repeat) + Atom(
         symbol="H", position=[0, 0, 0.5 * bulk_structure.cell[0, 0]]
@@ -181,6 +277,15 @@ def get_hydrogen_structure(element="Ni", n_repeat=3):
 def get_dipole_tensor(
     structure, potential_dataframe
 ) -> Annotated[np.ndarray, {"shape": (3, 3), "units": "eV"}]:
+    """Relax a hydrogen-containing structure and calculate its elastic dipole tensor.
+
+    Args:
+        structure: Atomic structure containing the hydrogen defect.
+        potential_dataframe: LAMMPS potential definition used for relaxation.
+
+    Returns:
+        Three-by-three elastic dipole tensor in electron volts.
+    """
     relaxed_structure = optimize_positions_with_lammpslib(
         structure, potential_dataframe=potential_dataframe
     )
@@ -192,7 +297,9 @@ def get_dipole_tensor(
         (
             _as_quantity(result["stress"], ureg.bar, ureg)
             * _as_quantity(result["volume"], ureg.angstrom**3, ureg)
-        ).to("eV").magnitude
+        )
+        .to("eV")
+        .magnitude
     )
     return dipole_tensor
 
@@ -202,12 +309,30 @@ def linspace(
     x_max: Annotated[float, {"units": "angstrom"}],
     n_points: int,
 ) -> Annotated[np.ndarray, {"units": "angstrom"}]:
+    """Return evenly spaced positions between two distances.
+
+    Args:
+        x_min: First position in angstrom.
+        x_max: Last position in angstrom.
+        n_points: Number of positions to generate.
+
+    Returns:
+        One-dimensional array of positions in angstrom.
+    """
     return np.linspace(x_min, x_max, n_points)
 
 
 def create_mesh(
     x: Annotated[np.ndarray, {"units": "angstrom"}],
 ) -> Annotated[np.ndarray, {"units": "angstrom"}]:
+    """Create a flattened two-dimensional Cartesian mesh from one coordinate axis.
+
+    Args:
+        x: One-dimensional coordinate axis in angstrom.
+
+    Returns:
+        Flattened array of two-dimensional mesh coordinates in angstrom.
+    """
     mesh = np.meshgrid(x, x, indexing="ij")
     mesh = np.stack(mesh, axis=-1).reshape(-1, 2)
     return mesh
@@ -219,6 +344,17 @@ def get_strain_field(
     d_dislocations: Annotated[np.ndarray, {"units": "angstrom"}],
     burgers_vectors: Annotated[np.ndarray, {"shape": (2, 3), "units": "angstrom"}],
 ) -> np.ndarray:
+    """Calculate the combined strain field of two partial dislocations.
+
+    Args:
+        medium: Linear-elastic medium used to calculate strain.
+        mesh: Two-dimensional coordinates at which to evaluate strain in angstrom.
+        d_dislocations: Separation vector between the partial dislocations in angstrom.
+        burgers_vectors: Partial Burgers vectors in angstrom.
+
+    Returns:
+        Strain tensor evaluated at every mesh coordinate.
+    """
     strain = medium.get_dislocation_strain(
         mesh - np.array([0.5, 0]) * d_dislocations, burgers_vector=burgers_vectors[0]
     )
@@ -232,6 +368,15 @@ def get_binding_energy_field(
     dipole_tensor: Annotated[np.ndarray, {"shape": (3, 3), "units": "eV"}],
     strain: np.ndarray,
 ):
+    """Calculate and reshape the hydrogen binding-energy field from strain.
+
+    Args:
+        dipole_tensor: Three-by-three elastic dipole tensor in electron volts.
+        strain: Strain tensor evaluated at each point of a square mesh.
+
+    Returns:
+        Two-dimensional hydrogen binding-energy field in electron volts.
+    """
     binding_energy = -(dipole_tensor * strain).sum(axis=(-1, -2))
     n_x = int(np.sqrt(len(binding_energy)))
     binding_energy = binding_energy.reshape(n_x, n_x)
@@ -244,6 +389,15 @@ def get_medium(
     ],
     orientation: list | np.ndarray | None,
 ):
+    """Create a linear-elastic medium using a stiffness matrix and orientation.
+
+    Args:
+        elastic_matrix: Six-by-six elastic matrix in gigapascal.
+        orientation: Crystal-to-box orientation matrix.
+
+    Returns:
+        Linear-elastic medium configured for the supplied crystal orientation.
+    """
     medium = LinearElasticity(
         C_tensor=elastic_matrix, orientation=np.asarray(orientation)
     )
@@ -261,6 +415,22 @@ def get_hydrogen_binding(
     x_max: Annotated[float, {"units": "angstrom"}] = 10,
     n_x: int = 100,
 ):
+    """Calculate the hydrogen binding-energy field around an FCC dislocation.
+
+    Args:
+        element: Chemical symbol of the FCC host crystal.
+        cubic: Whether to create a conventional cubic bulk cell.
+        dislocation_type: Dislocation character, either ``"edge"`` or ``"screw"``.
+        potential_name: Name of the LAMMPS potential to use.
+        n_repeat: Number of repetitions along each hydrogen-structure cell axis.
+        x_min: Lower bound of the field coordinate range in angstrom.
+        x_max: Upper bound of the field coordinate range in angstrom.
+        n_x: Number of coordinates along each field axis.
+
+    Returns:
+        Coordinate array in angstrom and a two-dimensional binding-energy field in
+        electron volts.
+    """
     structure = get_hydrogen_structure(element=element, n_repeat=n_repeat)
     orientation = get_orientation(dislocation_type=dislocation_type)
     potential_dataframe = get_potential_by_name(potential_name=potential_name)
