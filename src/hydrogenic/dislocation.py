@@ -1,7 +1,7 @@
 from typing import Annotated
 import flowrep as fr
 from elaston import LinearElasticity, tools
-from elaston.orientation import get_shockley_partials
+from elaston.orientation import get_shockley_partials, get_dislocation_orientation
 import numpy as np
 from pint import UnitRegistry
 from ase import Atom, Atoms
@@ -21,12 +21,15 @@ from atomistics.workflows import (
 )
 
 
-def get_orientation(dislocation_type: str = "screw") -> list:
-    if dislocation_type == "screw":
-        return [[1, -2, 1], [1, 1, 1]]
-    elif dislocation_type == "edge":
-        return [[-1, 0, 1], [1, 1, 1]]
-    raise ValueError(f"Dislocation type {dislocation_type} not supported.")
+def get_orientation(dislocation_type: str = "screw", glide_plane: str = "y") -> list:
+    assert glide_plane in ["x", "y"]
+    assert dislocation_type in ["edge", "screw"]
+    orient = get_orientation(dislocation_type=dislocation_type, crystal="fcc")
+    perpend = np.cross(orient["glide_plane"], orient["dislocation_line"])
+    if glide_plane == "x":
+        return np.array([orient["glide_plane"], -perpend, orient["dislocation_line"]])
+    else:
+        return np.array([perpend, orient["glide_plane"], orient["dislocation_line"]])
 
 
 def get_lattice_parameter(
@@ -57,10 +60,9 @@ def get_lattice_parameter(
 
 def get_burgers_vector(
     lattice_parameter: Annotated[float, {"units": "angstrom"}],
-    direction: list | None = None,
+    dislocation_type: str = "edge",
 ):
-    if direction is None:
-        direction = [-1, 0, 1]
+    direction = get_dislocation_orientation(dislocation_type)["burgers_vector"]
     burgers_vector = (
         lattice_parameter
         * np.asarray(direction)
@@ -266,7 +268,7 @@ def get_hydrogen_binding(
     )
     medium = get_medium(elastic_matrix, orientation=orientation)
     lattice_parameter = get_lattice_parameter(element, potential_dataframe, cubic=cubic)
-    burgers_vector = get_burgers_vector(lattice_parameter)
+    burgers_vector = get_burgers_vector(lattice_parameter, dislocation_type)
     burgers_vectors = get_partial_burgers_vectors(
         burgers_vector, orientation=orientation
     )
