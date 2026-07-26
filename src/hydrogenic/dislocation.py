@@ -1,24 +1,25 @@
 from typing import Annotated
+
 import flowrep as fr
-from elaston import LinearElasticity, tools
-from elaston.orientation import get_shockley_partials, get_dislocation_orientation
 import numpy as np
-from pint import UnitRegistry
-from ase import Atom, Atoms
-from atomistics.calculators import (
-    optimize_positions_with_lammpslib,
-    calc_static_with_lammpslib,
-)
-import os
 import pandas as pd
+from ase import Atom, Atoms
 from ase.build import bulk
-from atomistics.calculators import evaluate_with_lammpslib, get_potential_by_name
+from atomistics.calculators import (
+    calc_static_with_lammpslib,
+    evaluate_with_lammpslib,
+    get_potential_by_name,
+    optimize_positions_with_lammpslib,
+)
 from atomistics.workflows import (
     analyse_results_for_elastic_matrix,
     analyse_results_for_energy_volume_curve,
     get_tasks_for_elastic_matrix,
     get_tasks_for_energy_volume_curve,
 )
+from elaston import LinearElasticity, tools
+from elaston.orientation import get_dislocation_orientation, get_shockley_partials
+from pint import UnitRegistry
 
 
 def get_orientation(dislocation_type: str = "screw", glide_plane: str = "y") -> list:
