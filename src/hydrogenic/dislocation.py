@@ -103,10 +103,6 @@ def get_burgers_vector(
     return burgers_vector
 
 
-def _as_quantity(value, unit, ureg: UnitRegistry):
-    return value if hasattr(value, "to") else value * unit
-
-
 def get_elastic_matrix(
     fit_dict: dict,
 ) -> Annotated[
@@ -157,6 +153,21 @@ def evaluate_lammps_for_elastic_matrix(
     return elastic_matrix
 
 
+def rotate_elastic_tensor(elastic_matrix: np.ndarray, orientation: np.ndarray) -> np.ndarray:
+    """Rotate an elastic matrix from crystal to box coordinates.
+
+    Args:
+        elastic_matrix: Six-by-six elastic matrix in gigapascal.
+        orientation: Crystal-to-box orientation matrix.
+
+    Returns:
+        Six-by-six elastic matrix in box coordinates in gigapascal.
+    """
+    medium = LinearElasticity(C_tensor=elastic_matrix, orientation=orientation)
+    elastic_matrix_rotated = medium.get_elastic_tensor(voigt=True, rotate=True)
+    return elastic_matrix_rotated
+
+
 @fr.workflow
 def get_elastic_tensor(
     element="Ni",
@@ -164,6 +175,7 @@ def get_elastic_tensor(
     potential_name="1995--Angelo-J-E--Ni-Al-H--LAMMPS--ipr1",
     num_point=5,
     eps_range=0.005,
+    orientation: list | np.ndarray | None = None,
 ) -> Annotated[
     np.ndarray, {"shape": (6, 6), "units": "gigapascal", "label": "elastic_matrix"}
 ]:
@@ -180,12 +192,13 @@ def get_elastic_tensor(
         Six-by-six elastic matrix in gigapascal.
     """
     structure = bulk(element, cubic=cubic)
-    elastic_matrix = evaluate_lammps_for_elastic_matrix(
+    C = evaluate_lammps_for_elastic_matrix(
         structure=structure,
         potential_name=potential_name,
         num_point=num_point,
         eps_range=eps_range,
     )
+    elastic_matrix = rotate_elastic_tensor(C, orientation)
     return elastic_matrix
 
 
@@ -208,7 +221,9 @@ def get_partial_burgers_vectors(
 
 
 def get_dislocation_distance(
-    medium,
+    elastic_matrix: Annotated[
+        np.ndarray, {"shape": (6, 6), "units": "gigapascal"}
+        ],
     burgers_vectors: Annotated[np.ndarray, {"shape": (2, 3), "units": "angstrom"}],
     x_min: Annotated[float, {"units": "angstrom"}] = -10,
     x_max: Annotated[float, {"units": "angstrom"}] = 10,
@@ -229,26 +244,14 @@ def get_dislocation_distance(
         Partial-dislocation separation in angstrom.
     """
     ureg = UnitRegistry()
-    x = _as_quantity(
-        np.linspace(x_min, x_max, n_x)[:, None] * [1, 0], ureg.angstrom, ureg
-    )
-    stress = _as_quantity(
-        medium.get_dislocation_stress(
-            x,
-            _as_quantity(burgers_vectors[0], ureg.angstrom, ureg),
-        ),
-        ureg.gigapascal,
-        ureg,
-    )
+    medium = LinearElasticity(C_tensor=elastic_matrix * ureg.gigapascal)
+    x = np.linspace(x_min, x_max, n_x)[:, None] * [1, 0] * ureg.angstrom
+    stress = medium.get_dislocation_stress(x, burgers_vectors[0] * ureg.angstrom)
     f = (
-        _as_quantity(
-            medium.get_dislocation_force(
-                stress,
-                glide_plane=[0, 1, 0],
-                burgers_vector=_as_quantity(burgers_vectors[1], ureg.angstrom, ureg),
-            ),
-            ureg.millijoule / ureg.meter**2,
-            ureg,
+        medium.get_dislocation_force(
+            stress,
+            glide_plane=[0, 1, 0],
+            burgers_vector=burgers_vectors[1] * ureg.angstrom,
         )
         .to("millijoule/meter**2")
         .magnitude
@@ -295,10 +298,7 @@ def get_dipole_tensor(
     )
     ureg = UnitRegistry()
     dipole_tensor = (
-        (
-            _as_quantity(result["stress"], ureg.bar, ureg)
-            * _as_quantity(result["volume"], ureg.angstrom**3, ureg)
-        )
+        (result["stress"] * ureg.bar * result["volume"] * ureg.angstrom**3)
         .to("eV")
         .magnitude
     )
@@ -340,7 +340,7 @@ def create_mesh(
 
 
 def get_strain_field(
-    medium,
+    elastic_matrix: Annotated[np.ndarray, {"shape": (6, 6), "units": "gigapascal"}],
     mesh: Annotated[np.ndarray, {"units": "angstrom"}],
     d_dislocations: Annotated[np.ndarray, {"units": "angstrom"}],
     burgers_vectors: Annotated[np.ndarray, {"shape": (2, 3), "units": "angstrom"}],
@@ -356,11 +356,15 @@ def get_strain_field(
     Returns:
         Strain tensor evaluated at every mesh coordinate.
     """
+    ureg = UnitRegistry()
+    medium = LinearElasticity(C_tensor=elastic_matrix * ureg.gigapascal)
     strain = medium.get_dislocation_strain(
-        mesh - np.array([0.5, 0]) * d_dislocations, burgers_vector=burgers_vectors[0]
+        (mesh - np.array([0.5, 0]) * d_dislocations) * ureg.angstrom,
+        burgers_vector=burgers_vectors[0] * ureg.angstrom
     )
     strain += medium.get_dislocation_strain(
-        mesh + np.array([0.5, 0]) * d_dislocations, burgers_vector=burgers_vectors[1]
+        (mesh + np.array([0.5, 0]) * d_dislocations) * ureg.angstrom,
+        burgers_vector=burgers_vectors[1] * ureg.angstrom
     )
     return strain
 
@@ -382,27 +386,6 @@ def get_binding_energy_field(
     n_x = int(np.sqrt(len(binding_energy)))
     binding_energy = binding_energy.reshape(n_x, n_x)
     return binding_energy
-
-
-def get_medium(
-    elastic_matrix: Annotated[
-        np.ndarray, {"shape": (6, 6), "units": "gigapascal", "label": "elastic_matrix"}
-    ],
-    orientation: list | np.ndarray | None,
-):
-    """Create a linear-elastic medium using a stiffness matrix and orientation.
-
-    Args:
-        elastic_matrix: Six-by-six elastic matrix in gigapascal.
-        orientation: Crystal-to-box orientation matrix.
-
-    Returns:
-        Linear-elastic medium configured for the supplied crystal orientation.
-    """
-    medium = LinearElasticity(
-        C_tensor=elastic_matrix, orientation=np.asarray(orientation)
-    )
-    return medium
 
 
 @fr.workflow
@@ -437,19 +420,18 @@ def get_hydrogen_binding(
     potential_dataframe = get_potential_by_name(potential_name=potential_name)
     dipole_tensor = get_dipole_tensor(structure, potential_dataframe)
     elastic_matrix = get_elastic_tensor(
-        element=element, cubic=cubic, potential_name=potential_name
+        element=element, cubic=cubic, potential_name=potential_name, orientation=orientation
     )
-    medium = get_medium(elastic_matrix, orientation=orientation)
     lattice_parameter = get_lattice_parameter(element, potential_dataframe, cubic=cubic)
     burgers_vector = get_burgers_vector(lattice_parameter, dislocation_type)
     burgers_vectors = get_partial_burgers_vectors(
         burgers_vector, orientation=orientation
     )
     d_dislocations = get_dislocation_distance(
-        medium, burgers_vectors, x_min, x_max, n_x
+        elastic_matrix, burgers_vectors, x_min, x_max, n_x
     )
     x = linspace(x_min, x_max, n_x)
     mesh = create_mesh(x)
-    strain_field = get_strain_field(medium, mesh, d_dislocations, burgers_vectors)
+    strain_field = get_strain_field(elastic_matrix, mesh, d_dislocations, burgers_vectors)
     binding_energy_field = get_binding_energy_field(dipole_tensor, strain_field)
     return x, binding_energy_field
