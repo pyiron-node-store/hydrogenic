@@ -220,6 +220,18 @@ def get_partial_burgers_vectors(
     return burgers_vectors
 
 
+def get_stacking_fault_energy(element: str, potential_dataframe: pd.DataFrame) -> Annotated[float, {"units": "millijoule / meter**2"}]:
+    fcc = bulk(element, cubic=True)
+    a_fcc = fcc.cell[0, 0]
+    hcp = bulk(element, crystalstructure="hcp", a=a_fcc / np.sqrt(2), c=2 / np.sqrt(3) * a_fcc, orthorhombic=True)
+    result_fcc = calc_static_with_lammpslib(fcc, potential_dataframe=potential_dataframe)
+    result_hcp = calc_static_with_lammpslib(hcp, potential_dataframe=potential_dataframe)
+    ureg = UnitRegistry()
+    E_atom = (result_hcp["energy"] - result_fcc["energy"]) / np.prod(hcp.cell.diagonal()[:2]) / 2
+    E_sfe = (E_atom * ureg.electron_volt / ureg.angstrom**2).to("mJ / m**2").magnitude
+    return E_sfe
+
+
 def get_dislocation_distance(
     elastic_matrix: Annotated[
         np.ndarray, {"shape": (6, 6), "units": "gigapascal"}
