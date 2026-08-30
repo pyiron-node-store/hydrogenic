@@ -21,7 +21,7 @@ $$
 Then we can rewrite the binding energy equation by:
 
 $$
-u(x) = \phi(x)\sum_j \varepsilon(x - x_j) + \nabla\phi(x)\underbrace{\sum_j (x_j - x)\varepsilon(x - x_j)}_{=0} + \frac{1}{2}\Delta \phi(x)\sum_j \varepsilon(x - x_j)^T (x_j-x)(x_j-x)
+u(x) = \phi(x)\sum_j \varepsilon(x - x_j) + \nabla\phi(x)\underbrace{\sum_j (x_j - x)\varepsilon(x - x_j)}_{=0} + \frac{1}{2}\Delta \phi(x)\sum_j \varepsilon(x - x_j) (x_j-x)^T(x_j-x)
 $$
 
 The second order derivative has only diagonal components, and all the components are the same due to spatial symmetry. And since $\varepsilon$ depends only on the distance between two sites, we can use the site-independent constants $A_0$ and $A_1$ to rewrite the above equation two:
