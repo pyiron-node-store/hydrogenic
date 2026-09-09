@@ -19,7 +19,17 @@ from atomistics.workflows import (
 )
 from elaston import LinearElasticity, tools
 from elaston.orientation import get_dislocation_orientation, get_shockley_partials
+from lammpsparser import get_potential_dataframe
 from pint import UnitRegistry
+
+
+def get_potential(potential_name: str | None = None, structure: Atoms | None = None) -> pd.DataFrame:
+    if potential_name is not None:
+        return get_potential_by_name(potential_name=potential_name)
+    elif structure is not None:
+        return get_potential_dataframe(structure).iloc[0]
+    else:
+        raise ValueError("Either potential_name or structure must be provided.")
 
 
 def get_orientation(dislocation_type: str = "screw", glide_plane: str = "y") -> list:
@@ -121,7 +131,7 @@ def get_elastic_matrix(
 
 def evaluate_lammps_for_elastic_matrix(
     structure: Atoms,
-    potential_name="1995--Angelo-J-E--Ni-Al-H--LAMMPS--ipr1",
+    potential_name=None,
     num_point=5,
     eps_range=0.005,
 ) -> Annotated[np.ndarray, {"shape": (6, 6), "units": "gigapascal"}]:
@@ -136,7 +146,7 @@ def evaluate_lammps_for_elastic_matrix(
     Returns:
         Six-by-six elastic matrix in gigapascal.
     """
-    potential_dataframe = get_potential_by_name(potential_name=potential_name)
+    potential_dataframe = get_potential(potential_name=potential_name, structure=structure)
     task_dict, sym_dict = get_tasks_for_elastic_matrix(
         structure=structure,
         num_of_point=num_point,
@@ -174,7 +184,7 @@ def rotate_elastic_tensor(
 def get_elastic_tensor(
     element="Ni",
     cubic=True,
-    potential_name="1995--Angelo-J-E--Ni-Al-H--LAMMPS--ipr1",
+    potential_name=None,
     num_point=5,
     eps_range=0.005,
     orientation: list | np.ndarray | None = None,
@@ -223,7 +233,7 @@ def get_partial_burgers_vectors(
 
 
 def get_stacking_fault_energy(
-    element: str, potential_dataframe: pd.DataFrame
+    element: str, potential_dataframe: pd.DataFrame | None = None
 ) -> Annotated[float, {"units": "millijoule / meter**2"}]:
     fcc = bulk(element, cubic=True)
     a_fcc = fcc.cell[0, 0]
@@ -234,6 +244,8 @@ def get_stacking_fault_energy(
         c=2 / np.sqrt(3) * a_fcc,
         orthorhombic=True,
     )
+    if potential_dataframe is None:
+        potential_dataframe = get_potential(structure=fcc)
     result_fcc = calc_static_with_lammpslib(
         fcc, potential_dataframe=potential_dataframe
     )
@@ -445,7 +457,7 @@ def get_hydrogen_binding(
     """
     structure = get_hydrogen_structure(element=element, n_repeat=n_repeat)
     orientation = get_orientation(dislocation_type=dislocation_type)
-    potential_dataframe = get_potential_by_name(potential_name=potential_name)
+    potential_dataframe = get_potential(potential_name=potential_name, structure=structure)
     dipole_tensor = get_dipole_tensor(structure, potential_dataframe)
     elastic_matrix = get_elastic_tensor(
         element=element,
