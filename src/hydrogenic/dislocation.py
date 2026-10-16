@@ -23,7 +23,9 @@ from lammpsparser import get_potential_dataframe
 from pint import UnitRegistry
 
 
-def get_potential(potential_name: str | None = None, structure: Atoms | None = None) -> pd.DataFrame:
+def get_potential(
+    potential_name: str | None = None, structure: Atoms | None = None
+) -> pd.DataFrame:
     if potential_name is not None:
         return get_potential_by_name(potential_name=potential_name)
     elif structure is not None:
@@ -146,7 +148,9 @@ def evaluate_lammps_for_elastic_matrix(
     Returns:
         Six-by-six elastic matrix in gigapascal.
     """
-    potential_dataframe = get_potential(potential_name=potential_name, structure=structure)
+    potential_dataframe = get_potential(
+        potential_name=potential_name, structure=structure
+    )
     task_dict, sym_dict = get_tasks_for_elastic_matrix(
         structure=structure,
         num_of_point=num_point,
@@ -457,7 +461,9 @@ def get_hydrogen_binding(
     """
     structure = get_hydrogen_structure(element=element, n_repeat=n_repeat)
     orientation = get_orientation(dislocation_type=dislocation_type)
-    potential_dataframe = get_potential(potential_name=potential_name, structure=structure)
+    potential_dataframe = get_potential(
+        potential_name=potential_name, structure=structure
+    )
     dipole_tensor = get_dipole_tensor(structure, potential_dataframe)
     elastic_matrix = get_elastic_tensor(
         element=element,
