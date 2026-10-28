@@ -29,3 +29,9 @@ The second order derivative has only diagonal components, and all the components
 $$
 u(x) = A_0\phi(x) + A_1\Delta \phi(x)
 $$
+
+The free energy is now given by:
+
+$$
+F = \sum_x\phi u - k_{\mathrm B}T(\phi\log\phi + (1-\phi)\log(1-\phi))
+$$
